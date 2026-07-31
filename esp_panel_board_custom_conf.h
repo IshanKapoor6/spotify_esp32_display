@@ -35,7 +35,9 @@
 #if ESP_PANEL_USE_1024_600_LCD
     #define ESP_PANEL_BOARD_NAME                "Waveshare:ESP32-S3-Touch-LCD-5B"
 #else
-    #define ESP_PANEL_BOARD_NAME                "Waveshare:ESP32-S3-Touch-LCD-5"
+    // GPIO/panel-timing/touch/backlight config is identical to the LCD-5 board
+    // definition in ESP32_Display_Panel - this label is cosmetic only.
+    #define ESP_PANEL_BOARD_NAME                "Waveshare:ESP32-S3-Touch-LCD-4.3-B"
 #endif
 
 /**

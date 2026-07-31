@@ -1,39 +1,63 @@
-# LVGL Porting Example
+# Spotify Now Playing Display
 
-The example demonstrates how to port LVGL (v8.3.x). And for RGB LCD
-## How to Use
+A Spotify "now playing" display for the Waveshare ESP32-S3-Touch-LCD-4.3B (800x480,
+capacitive touch). Shows the current track, artist, album art, and progress bar;
+lets you play/pause/skip from the touchscreen; and can pull up live, time-synced
+lyrics for the track that's playing.
 
-To use this example, please firstly install the following dependent libraries:
+## Features
 
-- lvgl (v8.3.x)
+- Album art, track name, artist name, and progress bar, refreshed every few seconds
+- Touch controls for play/pause, next, and previous
+- A "Lyrics" screen with time-synced lyrics (via [lrclib.net](https://lrclib.net)),
+  auto-scrolling and highlighting the current line as the track plays
+- Dark UI styled after Spotify's own color palette
 
-Then follow the steps below to configure:
+## Hardware
 
-1. For **ESP32_Display_Panel**:
+- [Waveshare ESP32-S3-Touch-LCD-4.3B](https://www.waveshare.com/esp32-s3-touch-lcd-4.3B.htm)
+  (800x480 RGB LCD, GT911 capacitive touch, ESP32-S3 with 8MB PSRAM)
 
-    - [Configure drivers](../../../README.md#configuring-drivers) if needed.
-    - If using a supported development board, follow the [steps](../../../../README.md#using-supported-development-boards) to configure it.
-    - If using a custom board, follow the [steps](../../../../README.md#using-custom-development-boards) to configure it.
+## Required libraries (Arduino IDE Library Manager)
 
-2. Follow the [steps](../../../../README.md#configuring-lvgl) to configure the **lvgl**.
-3. Modify the macros in the [lvgl_port_v8.h](./lvgl_port_v8.h) file to configure the LVGL porting parameters.
-4. Navigate to the `Tools` menu in the Arduino IDE to choose a ESP board and configure its parameters, please refter to [Configuring Supported Development Boards](../../../../README.md#configuring-supported-development-boards)
-5. Verify and upload the example to your ESP board.
+- `ESP32_Display_Panel`
+- `esp-lib-utils`
+- `ESP32_IO_Expander`
+- `lvgl` (v8.4.x)
+- `ArduinoJson` (v7.x)
+- `TJpg_Decoder`
 
-## Serial Output
+## Setup
 
-```bash
-...
-LVGL porting example start
-Initialize panel device
-Initialize LVGL
-Create UI
-LVGL porting example end
-IDLE loop
-IDLE loop
-...
-```
+1. Install the libraries above via the Arduino IDE Library Manager.
+2. Copy `secrets.h.example` to `secrets.h` and fill in:
+   - Your WiFi SSID/password
+   - A Spotify app's client ID/secret (from the
+     [Spotify Developer Dashboard](https://developer.spotify.com/dashboard))
+   - A refresh token for your Spotify account, scoped for
+     `user-read-currently-playing`, `user-read-playback-state`, and
+     `user-modify-playback-state` (there are various one-off scripts online for
+     generating this via Spotify's OAuth flow - `secrets.h` is gitignored so it's
+     safe to keep your real token there).
+3. In Arduino IDE, select **ESP32S3 Dev Module** as the board and set:
 
-## Troubleshooting
+   | Setting | Value |
+   |---|---|
+   | PSRAM | OPI |
+   | Flash Mode | QIO 80MHz |
+   | Flash Size | 16MB |
+   | USB CDC On Boot | Enabled |
+   | Partition Scheme | Any scheme with a 3MB+ app partition (e.g. "16M Flash (3MB APP/9.9MB FATFS)") |
 
-Please check the [FAQ](../../../../README.md#faq) first to see if the same question exists. If not, please create a [Github issue](https://github.com/esp-arduino-libs/ESP32_Display_Panel/issues). We will get back to you as soon as possible.
+4. Verify and upload.
+
+## Notes / troubleshooting
+
+- If you see screen tearing/drift on the RGB LCD, this is a known ESP32-S3 +
+  RGB-LCD issue; the bounce buffer size in the `.ino` is already tuned up for it,
+  but see [ESP32_Display_Panel's troubleshooting guide](https://github.com/esp-arduino-libs/ESP32_Display_Panel/blob/master/docs/envs/use_with_arduino.md#solution-for-screen-drift-issue-when-using-esp32-s3-to-drive-rgb-lcd-in-arduino-ide)
+  if it persists.
+- Touch and the board's resolution/variant (800x480 vs. 1024x600) are configured
+  in `esp_panel_board_custom_conf.h`.
+- If the lyrics screen shows "No synced lyrics found," that track just isn't in
+  lrclib.net's (community-sourced) database - not every track has one.
