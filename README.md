@@ -11,6 +11,9 @@ lyrics for the track that's playing.
 - Touch controls for play/pause, next, and previous
 - A "Lyrics" screen with time-synced lyrics (via [lrclib.net](https://lrclib.net)),
   auto-scrolling and highlighting the current line as the track plays
+- A "Playlists" screen listing Liked Songs and your playlists - tap Liked Songs to
+  browse and pick a track, or tap any playlist to start it playing from the top
+  (see the note below on why playlists can't be browsed track-by-track)
 - Dark UI styled after Spotify's own color palette
 
 ## Hardware
@@ -35,10 +38,13 @@ lyrics for the track that's playing.
    - A Spotify app's client ID/secret (from the
      [Spotify Developer Dashboard](https://developer.spotify.com/dashboard))
    - A refresh token for your Spotify account, scoped for
-     `user-read-currently-playing`, `user-read-playback-state`, and
-     `user-modify-playback-state` (there are various one-off scripts online for
-     generating this via Spotify's OAuth flow - `secrets.h` is gitignored so it's
-     safe to keep your real token there).
+     `user-read-currently-playing`, `user-read-playback-state`,
+     `user-modify-playback-state`, `playlist-read-private`,
+     `playlist-read-collaborative`, and `user-library-read` (the last three
+     are for the Playlists screen - browsing your playlists and Liked Songs).
+     There are various one-off scripts online for generating this via Spotify's
+     OAuth flow - `secrets.h` is gitignored so it's safe to keep your real
+     token there.
 3. In Arduino IDE, select **ESP32S3 Dev Module** as the board and set:
 
    | Setting | Value |
@@ -61,3 +67,8 @@ lyrics for the track that's playing.
   in `esp_panel_board_custom_conf.h`.
 - If the lyrics screen shows "No synced lyrics found," that track just isn't in
   lrclib.net's (community-sourced) database - not every track has one.
+- Playlists can only be played from the top, not browsed track-by-track: Spotify
+  locked down the "Get Playlist Items" endpoint in late 2024, and it now 403s for
+  any app without an extended-access grant (which Spotify only issues to
+  reviewed/approved apps, not hobby projects). Liked Songs isn't affected by this
+  and still supports full browsing - it uses a different endpoint (`/me/tracks`).

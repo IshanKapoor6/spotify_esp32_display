@@ -10,6 +10,7 @@
 #include "spotify_client.h"
 #include "now_playing_ui.h"
 #include "lyrics_ui.h"
+#include "playlists_ui.h"
 
 using namespace esp_panel::drivers;
 using namespace esp_panel::board;
@@ -71,6 +72,7 @@ void setup()
 
     nowPlayingUI_init();   // builds the track/artist/art/buttons on the LVGL screen
     lyricsUI_init();       // builds the (initially hidden) lyrics screen
+    playlistsUI_init();    // builds the (initially hidden) library/playlist screens
 
     /* Release the mutex */
     lvgl_port_unlock();
@@ -97,6 +99,11 @@ void loop()
     // calls back-to-back in one loop() pass made button presses feel slower, not
     // faster. The regular POLL_INTERVAL_MS cadence below picks up the change.
     nowPlayingUI_processPendingAction();
+
+    // Same reasoning as above: services one queued library/playlist/track
+    // request per pass (open library, open a playlist, or play a track),
+    // each of which is a blocking network call.
+    playlistsUI_tick();
 
     if (millis() - lastPollMs > POLL_INTERVAL_MS) {
         lastPollMs = millis();

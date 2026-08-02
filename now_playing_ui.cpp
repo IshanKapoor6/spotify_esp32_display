@@ -1,5 +1,6 @@
 #include "now_playing_ui.h"
 #include "lyrics_ui.h"
+#include "playlists_ui.h"
 
 #include <lvgl.h>
 #include <WiFiClient.h>
@@ -123,6 +124,10 @@ static void btnLyricsCb(lv_event_t *e) {
   Serial.println("[UI] lyrics button clicked");
   lyricsUI_requestOpen();
 }
+static void btnPlaylistsCb(lv_event_t *e) {
+  Serial.println("[UI] playlists button clicked");
+  playlistsUI_requestOpen();
+}
 
 static bool s_isPlaying = false;
 
@@ -220,6 +225,18 @@ void nowPlayingUI_init() {
   lv_label_set_text(lblLyrics, LV_SYMBOL_LIST " Lyrics");
   lv_obj_set_style_text_color(lblLyrics, lv_color_hex(COLOR_TEXT), 0);
   lv_obj_center(lblLyrics);
+
+  lv_obj_t *btnPlaylists = lv_btn_create(scr);
+  lv_obj_set_size(btnPlaylists, 150, 50);
+  lv_obj_set_style_radius(btnPlaylists, 25, 0);
+  lv_obj_set_style_bg_color(btnPlaylists, lv_color_hex(COLOR_SURFACE), 0);
+  lv_obj_set_style_shadow_width(btnPlaylists, 0, 0);
+  lv_obj_align(btnPlaylists, LV_ALIGN_BOTTOM_LEFT, 20, -20);
+  lv_obj_add_event_cb(btnPlaylists, btnPlaylistsCb, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *lblPlaylists = lv_label_create(btnPlaylists);
+  lv_label_set_text(lblPlaylists, LV_SYMBOL_DIRECTORY " Playlists");
+  lv_obj_set_style_text_color(lblPlaylists, lv_color_hex(COLOR_TEXT), 0);
+  lv_obj_center(lblPlaylists);
 }
 
 void nowPlayingUI_update(const NowPlaying &np) {

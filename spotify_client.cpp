@@ -190,3 +190,159 @@ bool SpotifyClient::previous() {
   http.end();
   return code == 204 || code == 202 || code == 200;
 }
+
+bool SpotifyClient::getPlaylists(PlaylistBrief *out, int maxCount, int &outCount) {
+  outCount = 0;
+  if (millis() > _accessTokenExpiresAt) {
+    if (!refreshAccessToken()) return false;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  // Trimmed down with `fields` - unfiltered this is a *full* playlist object per
+  // item (description, images, full owner object, etc.), which for 50 playlists
+  // was ~58KB and exhausted internal heap badly enough to abort the whole board
+  // (WiFi's PHY driver couldn't even allocate an internal timer). Filtered it's ~3KB.
+  String url = "https://api.spotify.com/v1/me/playlists?limit=" + String(maxCount) +
+               "&fields=items(id,name,tracks.total)";
+  http.begin(client, url);
+  http.addHeader("Authorization", "Bearer " + _accessToken);
+
+  int code = http.GET();
+  if (code != 200) {
+    Serial.printf("[Spotify] get playlists HTTP %d: %s\n", code, http.getString().c_str());
+    http.end();
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, payload);
+  if (err) {
+    Serial.printf("[Spotify] Failed to parse playlists response (%d bytes): %s\n",
+                  payload.length(), err.c_str());
+    return false;
+  }
+
+  for (JsonObject item : doc["items"].as<JsonArray>()) {
+    if (outCount >= maxCount || item.isNull()) continue;
+    out[outCount].id = item["id"].as<String>();
+    out[outCount].name = item["name"].as<String>();
+    out[outCount].trackCount = item["tracks"]["total"] | 0;
+    outCount++;
+  }
+
+  return true;
+}
+
+bool SpotifyClient::getLikedSongs(TrackBrief *out, int maxCount, int &outCount) {
+  outCount = 0;
+  if (millis() > _accessTokenExpiresAt) {
+    if (!refreshAccessToken()) return false;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  // Trimmed down with `fields`, same as the old playlist-tracks call - without
+  // it this response is 90KB+ (full track/album objects with market lists),
+  // which was blowing out the ESP32's heap and crashing mid-parse.
+  String url = "https://api.spotify.com/v1/me/tracks?limit=" + String(maxCount) +
+               "&fields=items(track(uri,name,artists(name)))";
+  http.begin(client, url);
+  http.addHeader("Authorization", "Bearer " + _accessToken);
+
+  int code = http.GET();
+  if (code != 200) {
+    Serial.printf("[Spotify] get liked songs HTTP %d: %s\n", code, http.getString().c_str());
+    http.end();
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, payload);
+  if (err) {
+    Serial.printf("[Spotify] Failed to parse liked songs response (%d bytes): %s\n",
+                  payload.length(), err.c_str());
+    return false;
+  }
+
+  for (JsonObject item : doc["items"].as<JsonArray>()) {
+    if (outCount >= maxCount) continue;
+    JsonObject track = item["track"];
+    if (track.isNull()) continue;  // e.g. a local file with no track object
+    String uri = track["uri"] | "";
+    if (uri.length() == 0) continue;  // local files aren't playable via the API
+    out[outCount].uri = uri;
+    out[outCount].name = track["name"].as<String>();
+    JsonArray artists = track["artists"];
+    if (artists.size() > 0) {
+      out[outCount].artistName = artists[0]["name"].as<String>();
+    }
+    outCount++;
+  }
+
+  return true;
+}
+
+bool SpotifyClient::playPlaylist(const String &playlistId) {
+  if (millis() > _accessTokenExpiresAt) {
+    if (!refreshAccessToken()) return false;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, "https://api.spotify.com/v1/me/player/play");
+  http.addHeader("Authorization", "Bearer " + _accessToken);
+  http.addHeader("Content-Type", "application/json");
+
+  JsonDocument body;
+  body["context_uri"] = "spotify:playlist:" + playlistId;
+  String json;
+  serializeJson(body, json);
+
+  int code = http.PUT(json);
+  if (code != 204 && code != 202 && code != 200) {
+    Serial.printf("[Spotify] play playlist failed, HTTP %d: %s\n", code, http.getString().c_str());
+  } else {
+    Serial.println("[Spotify] play playlist OK");
+  }
+  http.end();
+  return code == 204 || code == 202 || code == 200;
+}
+
+bool SpotifyClient::playTrackUris(const String *uris, int count) {
+  if (count <= 0) return false;
+  if (millis() > _accessTokenExpiresAt) {
+    if (!refreshAccessToken()) return false;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, "https://api.spotify.com/v1/me/player/play");
+  http.addHeader("Authorization", "Bearer " + _accessToken);
+  http.addHeader("Content-Type", "application/json");
+
+  JsonDocument body;
+  JsonArray arr = body["uris"].to<JsonArray>();
+  for (int i = 0; i < count; i++) arr.add(uris[i]);
+  String json;
+  serializeJson(body, json);
+
+  int code = http.PUT(json);
+  if (code != 204 && code != 202 && code != 200) {
+    Serial.printf("[Spotify] play tracks failed, HTTP %d: %s\n", code, http.getString().c_str());
+  } else {
+    Serial.println("[Spotify] play tracks OK");
+  }
+  http.end();
+  return code == 204 || code == 202 || code == 200;
+}
