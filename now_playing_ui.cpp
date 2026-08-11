@@ -24,6 +24,9 @@ static lv_obj_t *trackLabel;
 static lv_obj_t *artistLabel;
 static lv_obj_t *progressBar;
 static lv_obj_t *lblPlayPauseIcon;
+static lv_obj_t *btnShuffle;
+static lv_obj_t *btnRepeat;
+static lv_obj_t *lblRepeatIcon;
 
 // ---- Album art decode buffer (lives in PSRAM) ----
 // Sized for up to 320x320 @ 16bpp (RGB565). Spotify's mid-size art is ~300x300.
@@ -104,8 +107,10 @@ static void downloadAndDecodeArt(const String &url) {
 // directly (that would freeze touch/rendering until the request finishes).
 // Instead they just queue the action; nowPlayingUI_processPendingAction()
 // (called from loop(), off the LVGL task) does the actual SpotifyClient call.
-enum class PlaybackAction { None, Play, Pause, Next, Previous };
+enum class PlaybackAction { None, Play, Pause, Next, Previous, SetShuffle, SetRepeat };
 static volatile PlaybackAction s_pendingAction = PlaybackAction::None;
+static volatile bool s_pendingShuffleTarget = false;
+static String s_pendingRepeatTarget = "off";
 
 static void btnPrevCb(lv_event_t *e) {
   Serial.println("[UI] prev button clicked");
@@ -119,6 +124,39 @@ static void btnPlayPauseCb(lv_event_t *e) {
 static void btnNextCb(lv_event_t *e) {
   Serial.println("[UI] next button clicked");
   s_pendingAction = PlaybackAction::Next;
+}
+static bool s_shuffleOn = false;
+static String s_repeatMode = "off";  // "off", "context", or "track"
+
+// Reflects s_shuffleOn onto the button's visual state. Called both after a
+// tap (optimistic update) and after a server poll (authoritative update).
+static void updateShuffleButtonStyle() {
+  lv_obj_set_style_bg_color(btnShuffle, lv_color_hex(s_shuffleOn ? COLOR_ACCENT : COLOR_SURFACE), 0);
+}
+
+// Same idea for repeat: color shows on/off, and "track" mode additionally
+// appends "1" since LVGL has no built-in repeat-one glyph.
+static void updateRepeatButtonStyle() {
+  bool active = s_repeatMode != "off";
+  lv_obj_set_style_bg_color(btnRepeat, lv_color_hex(active ? COLOR_ACCENT : COLOR_SURFACE), 0);
+  lv_label_set_text(lblRepeatIcon, s_repeatMode == "track" ? LV_SYMBOL_LOOP "1" : LV_SYMBOL_LOOP);
+}
+
+static void btnShuffleCb(lv_event_t *e) {
+  s_shuffleOn = !s_shuffleOn;
+  Serial.printf("[UI] shuffle button clicked, target=%d\n", s_shuffleOn);
+  s_pendingShuffleTarget = s_shuffleOn;
+  s_pendingAction = PlaybackAction::SetShuffle;
+  updateShuffleButtonStyle();
+}
+static void btnRepeatCb(lv_event_t *e) {
+  if (s_repeatMode == "off") s_repeatMode = "context";
+  else if (s_repeatMode == "context") s_repeatMode = "track";
+  else s_repeatMode = "off";
+  Serial.printf("[UI] repeat button clicked, target=%s\n", s_repeatMode.c_str());
+  s_pendingRepeatTarget = s_repeatMode;
+  s_pendingAction = PlaybackAction::SetRepeat;
+  updateRepeatButtonStyle();
 }
 static void btnLyricsCb(lv_event_t *e) {
   Serial.println("[UI] lyrics button clicked");
@@ -214,6 +252,16 @@ void nowPlayingUI_init() {
   lv_obj_t *btnNext = createIconButton(scr, sideDiam, COLOR_SURFACE, LV_SYMBOL_NEXT, btnNextCb, nullptr);
   lv_obj_align(btnNext, LV_ALIGN_TOP_LEFT, playX + playDiam + gap, controlsY + (playDiam - sideDiam) / 2);
 
+  const int smallDiam = 48;
+  const int smallGap = 16;
+  const int smallY = controlsY + (playDiam - smallDiam) / 2;
+
+  btnShuffle = createIconButton(scr, smallDiam, COLOR_SURFACE, LV_SYMBOL_SHUFFLE, btnShuffleCb, nullptr);
+  lv_obj_align(btnShuffle, LV_ALIGN_TOP_LEFT, playX - gap - sideDiam - smallGap - smallDiam, smallY);
+
+  btnRepeat = createIconButton(scr, smallDiam, COLOR_SURFACE, LV_SYMBOL_LOOP, btnRepeatCb, nullptr, &lblRepeatIcon);
+  lv_obj_align(btnRepeat, LV_ALIGN_TOP_LEFT, playX + playDiam + gap + sideDiam + smallGap, smallY);
+
   lv_obj_t *btnLyrics = lv_btn_create(scr);
   lv_obj_set_size(btnLyrics, 120, 50);
   lv_obj_set_style_radius(btnLyrics, 25, 0);
@@ -243,6 +291,18 @@ void nowPlayingUI_update(const NowPlaying &np) {
   s_isPlaying = np.isPlaying;
   lv_label_set_text(lblPlayPauseIcon, np.isPlaying ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY);
 
+  // Only adopt the server's shuffle/repeat state when we don't have a tap still
+  // in flight - otherwise a poll landing right after a tap could visually snap
+  // the button back before processPendingAction() has had a chance to apply it.
+  if (s_pendingAction != PlaybackAction::SetShuffle) {
+    s_shuffleOn = np.shuffleState;
+    updateShuffleButtonStyle();
+  }
+  if (s_pendingAction != PlaybackAction::SetRepeat) {
+    s_repeatMode = np.repeatState;
+    updateRepeatButtonStyle();
+  }
+
   if (!np.hasTrack) {
     lv_label_set_text(trackLabel, "Nothing playing");
     lv_label_set_text(artistLabel, "");
@@ -270,10 +330,12 @@ bool nowPlayingUI_processPendingAction() {
   s_pendingAction = PlaybackAction::None;
 
   switch (action) {
-    case PlaybackAction::Play:     spotify.play();     break;
-    case PlaybackAction::Pause:    spotify.pause();    break;
-    case PlaybackAction::Next:     spotify.next();     break;
-    case PlaybackAction::Previous: spotify.previous(); break;
+    case PlaybackAction::Play:        spotify.play();     break;
+    case PlaybackAction::Pause:       spotify.pause();    break;
+    case PlaybackAction::Next:        spotify.next();     break;
+    case PlaybackAction::Previous:    spotify.previous(); break;
+    case PlaybackAction::SetShuffle:  spotify.setShuffle(s_pendingShuffleTarget); break;
+    case PlaybackAction::SetRepeat:   spotify.setRepeatMode(s_pendingRepeatTarget); break;
     default: break;
   }
   return true;

@@ -10,7 +10,7 @@ void nowPlayingUI_init();
 void nowPlayingUI_update(const NowPlaying &np);
 
 // Call from loop() (not from an LVGL callback) to execute any pending playback
-// action (play/pause/next/previous) queued by a button press. This makes a
+// action (play/pause/next/previous/shuffle/repeat) queued by a button press. This makes a
 // blocking network call, so it must run off the LVGL task - the button
 // callbacks just queue the request instead of calling SpotifyClient directly,
 // so taps stay visually responsive instead of freezing the UI.

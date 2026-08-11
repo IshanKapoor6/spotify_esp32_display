@@ -9,6 +9,8 @@ struct NowPlaying {
   String albumArtUrl;   // largest available album art URL
   long progressMs = 0;
   long durationMs = 0;
+  bool shuffleState = false;
+  String repeatState = "off";  // "off", "context" (repeat playlist/album), or "track" (repeat one)
 };
 
 // A row in the playlists list. Fixed-size arrays of these (rather than a
@@ -41,6 +43,8 @@ class SpotifyClient {
   bool pause();
   bool next();
   bool previous();
+  bool setShuffle(bool enable);
+  bool setRepeatMode(const String &mode);  // "off", "context", or "track"
 
   // Library browsing. Needs the refresh token to be scoped for
   // playlist-read-private and user-library-read - see README.

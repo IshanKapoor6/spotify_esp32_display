@@ -58,7 +58,10 @@ bool SpotifyClient::getNowPlaying(NowPlaying &out) {
   client.setInsecure();
 
   HTTPClient http;
-  http.begin(client, "https://api.spotify.com/v1/me/player/currently-playing");
+  // /v1/me/player (not /v1/me/player/currently-playing) - the currently-playing
+  // endpoint doesn't include shuffle_state/repeat_state, which we need for the
+  // shuffle/repeat buttons to reflect the real player state.
+  http.begin(client, "https://api.spotify.com/v1/me/player");
   http.addHeader("Authorization", "Bearer " + _accessToken);
 
   int code = http.GET();
@@ -95,6 +98,8 @@ bool SpotifyClient::getNowPlaying(NowPlaying &out) {
   out = NowPlaying();
   out.isPlaying = doc["is_playing"] | false;
   out.progressMs = doc["progress_ms"] | 0;
+  out.shuffleState = doc["shuffle_state"] | false;
+  out.repeatState = doc["repeat_state"] | "off";
 
   JsonObject item = doc["item"];
   if (item.isNull()) {
@@ -186,6 +191,42 @@ bool SpotifyClient::previous() {
     Serial.printf("[Spotify] previous failed, HTTP %d: %s\n", code, http.getString().c_str());
   } else {
     Serial.println("[Spotify] previous OK");
+  }
+  http.end();
+  return code == 204 || code == 202 || code == 200;
+}
+
+bool SpotifyClient::setShuffle(bool enable) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  String url = String("https://api.spotify.com/v1/me/player/shuffle?state=") + (enable ? "true" : "false");
+  http.begin(client, url);
+  http.addHeader("Authorization", "Bearer " + _accessToken);
+  http.addHeader("Content-Length", "0");
+  int code = http.PUT("");
+  if (code != 204 && code != 202 && code != 200) {
+    Serial.printf("[Spotify] set shuffle failed, HTTP %d: %s\n", code, http.getString().c_str());
+  } else {
+    Serial.println("[Spotify] set shuffle OK");
+  }
+  http.end();
+  return code == 204 || code == 202 || code == 200;
+}
+
+bool SpotifyClient::setRepeatMode(const String &mode) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  String url = "https://api.spotify.com/v1/me/player/repeat?state=" + mode;
+  http.begin(client, url);
+  http.addHeader("Authorization", "Bearer " + _accessToken);
+  http.addHeader("Content-Length", "0");
+  int code = http.PUT("");
+  if (code != 204 && code != 202 && code != 200) {
+    Serial.printf("[Spotify] set repeat failed, HTTP %d: %s\n", code, http.getString().c_str());
+  } else {
+    Serial.println("[Spotify] set repeat OK");
   }
   http.end();
   return code == 204 || code == 202 || code == 200;
